@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meta-openenv-sign-lang"
+version = "0.1.0"
+description = "Sign Language Interpreter Environment for Meta OpenEnv"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "openai",
+    "pydantic",
+    "python-dotenv"
+]
