@@ -1,0 +1,298 @@
+# OpenEnv Configuration for Sign Language Interpreter
+# Meta PyTorch OpenEnv Hackathon
+
+name: sign_language_interpreter
+version: 1.0.0
+description: |
+  A Sign Language Interpreter environment that challenges agents to translate 
+  American Sign Language (ASL) gestures into English text. The environment provides 
+  visual descriptions of hand movements, facial expressions, and audio hints for 
+  disambiguation across three difficulty levels.
+
+entry_point: env:SignInterpreterEnv
+
+# Environment metadata
+metadata:
+  author: "Meta OpenEnv Hackathon Participant"
+  license: MIT
+  tags:
+    - sign-language
+    - asl
+    - translation
+    - computer-vision
+    - nlp
+  language: python
+  requirements:
+    - pydantic>=2.0.0
+    - python-dateutil>=2.8.0
+    - typing-extensions>=4.0.0
+    - numpy>=1.21.0
+
+# Task definitions
+tasks:
+  easy:
+    name: "Single Sign Translation"
+    description: |
+      Translate a single ASL sign into English text. The agent receives a visual 
+      description of hand movements and facial expressions. Easy difficulty focuses 
+      on common, unambiguous signs.
+    
+    evaluation:
+      type: translation_accuracy
+      target_accuracy: 0.8
+      max_episodes: 100
+      max_steps_per_episode: 5
+    
+    reward_structure:
+      correct_translation: 1.0  # Easy difficulty
+      wrong_translation: -0.1
+      correct_query: 0.2  # Capped at sequence length to prevent exploitation
+      wrong_query: -0.1
+      correct_context_query: 0.2  # Capped at sequence length to prevent exploitation
+      wrong_context_query: -0.1
+      step_penalty: -0.01  # Small penalty to encourage efficiency
+    
+    example_signs:
+      - "HELLO"
+      - "THANK" 
+      - "PLEASE"
+      - "WATER"
+      - "APPLE"
+    
+    expected_agent_behavior: |
+      The agent should observe the hand description and facial expression,
+      optionally query the dictionary for unfamiliar signs, then submit the 
+      correct translation.
+
+  medium:
+    name: "3-Word Sequence Translation"
+    description: |
+      Translate a sequence of 3 ASL signs into a complete English phrase. 
+      The agent must observe each sign in sequence and combine them into 
+      a coherent translation. Medium difficulty includes common phrases and 
+      simple sentences.
+    
+    evaluation:
+      type: sequence_translation_accuracy
+      target_accuracy: 0.7
+      max_episodes: 100
+      max_steps_per_episode: 10
+    
+    reward_structure:
+      correct_translation: 1.0  # Easy difficulty
+      wrong_translation: -0.1
+      correct_query: 0.2  # Capped at sequence length to prevent exploitation
+      wrong_query: -0.1
+      correct_context_query: 0.2  # Capped at sequence length to prevent exploitation
+      wrong_context_query: -0.1
+      step_penalty: -0.01  # Small penalty to encourage efficiency
+    
+    example_sequences:
+      - "ME WANT WATER"
+      - "THANK YOU PLEASE"
+      - "HOUSE CAR TREE"
+      - "APPLE BANANA BREAD"
+      - "HELP ME PLEASE"
+    
+    expected_agent_behavior: |
+      The agent should observe each sign in the sequence, track previous signs,
+      optionally query the dictionary for clarification, then submit the complete
+      phrase translation.
+
+  hard:
+    name: "Disambiguated Sign Translation"
+    description: |
+      Translate ASL signs that look similar but have different meanings based on 
+      context and audio hints. The agent must use audio hints to distinguish between 
+      signs like "BAT" (animal) vs "BASEBALL" (sports equipment). Hard difficulty 
+      requires contextual understanding and multi-modal reasoning.
+    
+    evaluation:
+      type: contextual_translation_accuracy
+      target_accuracy: 0.6
+      max_episodes: 100
+      max_steps_per_episode: 10
+    
+    reward_structure:
+      correct_translation: 1.0  # Easy difficulty
+      wrong_translation: -0.1
+      correct_query: 0.2  # Capped at sequence length to prevent exploitation
+      wrong_query: -0.1
+      correct_context_query: 0.2  # Capped at sequence length to prevent exploitation
+      wrong_context_query: -0.1
+      step_penalty: -0.01  # Small penalty to encourage efficiency
+    
+    ambiguous_pairs:
+      - signs: ["BAT", "BASEBALL"]
+        hints: ["animal", "sports equipment"]
+        description: "Both use similar hand motions but different contexts"
+      - signs: ["CAT", "DOG"]
+        hints: ["animal", "animal"]
+        description: "Different facial expressions and movements"
+      - signs: ["BOOK", "READ"]
+        hints: ["object", "action"]
+        description: "Similar hand shapes but different movement patterns"
+      - signs: ["SQUASH_VEGETABLE", "SQUASH_SPORT"]
+        hints: ["vegetable", "sport"]
+        description: "Same C-shape hand motion but different contexts and facial expressions"
+      - signs: ["ORANGE_FRUIT", "ORANGE_COLOR"]
+        hints: ["fruit", "color"]
+        description: "Same O-shape hand motion but different contexts and facial expressions"
+    
+    expected_agent_behavior: |
+      The agent must pay attention to audio hints, facial expressions, and 
+      movement patterns to distinguish between visually similar signs. The agent 
+      should query the dictionary when uncertain and use contextual clues to 
+      make accurate translations.
+
+# Environment configuration
+environment:
+  max_steps: 10
+  memory_limit: "8GB"
+  seed: 42
+  
+  # Sign dictionary configuration
+  dictionary:
+    total_signs: 33
+    categories:
+      - food
+      - drink
+      - animal
+      - object
+      - verb
+      - pronoun
+      - polite
+      - location
+      - transportation
+      - nature
+      - technology
+      - art
+      - action
+      - sports
+      - color
+    
+    difficulty_levels:
+      1: 8 signs  # Very easy
+      2: 10 signs # Medium
+      3: 7 signs  # Hard
+
+# Agent interface specification
+agent_interface:
+  observation_space:
+    type: "structured"
+    fields:
+      hand_description:
+        type: "string"
+        description: "Visual description of hand movements and positions"
+      facial_expression:
+        type: "string"
+        optional: true
+        description: "Facial expression accompanying the sign"
+      audio_hint:
+        type: "string"
+        optional: true
+        description: "Audio hint for disambiguation"
+      context_clue:
+        type: "string"
+        optional: true
+        description: "Context clue for disambiguation"
+      sequence_length:
+        type: "integer"
+        description: "Number of signs in current sequence"
+      current_position:
+        type: "integer"
+        description: "Current position in the sequence"
+      difficulty:
+        type: "enum"
+        values: ["easy", "medium", "hard"]
+        description: "Current task difficulty"
+      previous_signs:
+        type: "array"
+        items: "string"
+        description: "Previously observed signs in sequence"
+
+  action_space:
+    type: "structured"
+    fields:
+      action_type:
+        type: "enum"
+        values: ["query_dict", "query_context", "submit_translation"]
+        description: "Type of action to perform"
+      query_sign:
+        type: "string"
+        optional: true
+        description: "Sign to query in dictionary"
+      query_context:
+        type: "string"
+        optional: true
+        description: "Sign to query context for"
+      translation:
+        type: "string"
+        optional: true
+        description: "Translation answer"
+
+# Evaluation metrics
+evaluation_metrics:
+  - name: "translation_accuracy"
+    description: "Percentage of correct translations"
+    calculation: "correct_translations / total_attempts"
+    
+  - name: "sequence_accuracy"
+    description: "Percentage of completely correct sequence translations"
+    calculation: "correct_sequences / total_sequence_attempts"
+    
+  - name: "query_efficiency"
+    description: "Ratio of correct queries to total queries"
+    calculation: "correct_queries / total_queries"
+    
+  - name: "episode_reward"
+    description: "Average reward per episode"
+    calculation: "total_reward / total_episodes"
+    
+  - name: "success_rate"
+    description: "Percentage of episodes with positive total reward"
+    calculation: "positive_episodes / total_episodes"
+
+# Logging and monitoring
+logging:
+  level: INFO
+  format: "[{timestamp}] {level}: {message}"
+  
+  metrics_to_track:
+    - episode_reward
+    - translation_accuracy
+    - query_efficiency
+    - success_rate
+    - average_steps_per_episode
+
+# Testing configuration
+testing:
+  test_episodes: 50
+  validation_episodes: 25
+  test_seed: 123
+  
+  test_scenarios:
+    - name: "basic_translation"
+      difficulty: "easy"
+      episodes: 20
+      
+    - name: "sequence_translation"
+      difficulty: "medium"
+      episodes: 20
+      
+    - name: "disambiguation"
+      difficulty: "hard"
+      episodes: 10
+
+# Documentation
+documentation:
+  repo_url: "https://github.com/meta-openenv/sign-language-interpreter"
+  examples:
+    - "test_env.py"
+    - "inference.py"
+  
+  api_reference:
+    reset: "Resets environment and returns initial observation"
+    step: "Executes action and returns (observation, reward, done, info)"
+    state: "Returns current environment state"
+    render: "Displays current environment state"
