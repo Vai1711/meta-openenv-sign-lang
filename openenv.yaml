@@ -1,65 +1,47 @@
 name: sign_language_interpreter
 version: 1.0.0
-description: |
-  A multi-modal Sign Language Interpreter environment that translates 
-  American Sign Language (ASL) gestures into English text using hand 
-  descriptions, facial expressions, and audio hints.
 entry_point: env:SignInterpreterEnv
 
-# The Grader requires at least 3 tasks. We use IDs 0, 1, and 2 
-# to map to Easy, Medium, and Hard in your env.py logic.
 tasks:
   - id: 0
     name: "sign-translation-easy"
-    difficulty: "easy"
+    description: "Translate a single ASL sign."
+    grader: "translation_accuracy"
+    evaluation:
+      type: "translation_accuracy"
+      target_accuracy: 0.8
+      max_episodes: 20
+      max_steps_per_episode: 5
   - id: 1
     name: "sign-translation-medium"
-    difficulty: "medium"
+    description: "Translate a 3-word ASL sequence."
+    grader: "sequence_translation_accuracy"
+    evaluation:
+      type: "sequence_translation_accuracy"
+      target_accuracy: 0.7
+      max_episodes: 20
+      max_steps_per_episode: 10
   - id: 2
     name: "sign-translation-hard"
-    difficulty: "hard"
+    description: "Disambiguate Visual Twins using audio/context hints."
+    grader: "contextual_translation_accuracy"
+    evaluation:
+      type: "contextual_translation_accuracy"
+      target_accuracy: 0.6
+      max_episodes: 10
+      max_steps_per_episode: 10
 
-environment:
-  max_steps: 10
-  memory_limit: "8GB"
-  seed: 42
-
-# Defines the data structure for the LLM agent and grader checks
 agent_interface:
   observation_space:
     type: "structured"
     fields:
-      hand_description: 
-        type: "string"
-      facial_expression: 
-        type: "string"
-        optional: true
-      audio_hint: 
-        type: "string"
-        optional: true
-      sequence_length: 
-        type: "integer"
-      current_position: 
-        type: "integer"
-      difficulty: 
-        type: "string"
-      previous_signs: 
-        type: "array"
-        items: "string"
+      hand_description: {type: "string"}
+      facial_expression: {type: "string", optional: true}
+      audio_hint: {type: "string", optional: true}
+      context_clue: {type: "string", optional: true}
+      difficulty: {type: "string"}
   action_space:
     type: "structured"
     fields:
-      action_type: 
-        type: "string"
-      translation: 
-        type: "string"
-        optional: true
-
-# Metrics required for the internal evaluation logic
-evaluation_metrics:
-  - name: "translation_accuracy"
-    description: "Percentage of correct translations"
-    calculation: "correct_translations / total_attempts"
-  - name: "episode_reward"
-    description: "Average reward per episode"
-    calculation: "total_reward / total_episodes"
+      action_type: {type: "enum", values: ["query_dict", "query_context", "submit_translation"]}
+      translation: {type: "string", optional: true}
