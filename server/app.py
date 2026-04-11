@@ -16,7 +16,12 @@ from typing import Dict, Any, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from env import SignInterpreterEnv, SignAction, ActionType
+# Ensure these imports match your file structure
+try:
+    from env import SignInterpreterEnv, SignAction, ActionType
+except ImportError:
+    # Fallback if running from within the server directory
+    from ..env import SignInterpreterEnv, SignAction, ActionType
 
 app = FastAPI(title="Sign Language Interpreter Environment", version="1.0.0")
 
@@ -51,10 +56,7 @@ async def reset(request: Optional[ResetRequest] = None):
     Crucial: Grader passes task_id here to select difficulty.
     """
     try:
-        # Extract task_id if provided by the grader
         task_id = request.task_id if request else None
-        
-        # Pass task_id to the reset method we updated in env.py
         observation = env.reset(task_id=task_id)
         
         return {
@@ -71,7 +73,6 @@ async def reset(request: Optional[ResetRequest] = None):
 async def step(request: ActionRequest):
     """Take a step in the environment"""
     try:
-        # Map string actions to ActionType Enum
         action_type_map = {
             "query_dict": ActionType.QUERY_DICT,
             "query_context": ActionType.QUERY_CONTEXT,
@@ -91,14 +92,12 @@ async def step(request: ActionRequest):
             translation=request.translation
         )
         
-        # Validate action parameters
         if not action.validate_action():
             return JSONResponse(
                 status_code=400,
-                content={"error": "Invalid action parameters for selected action_type", "success": False}
+                content={"error": "Invalid action parameters", "success": False}
             )
         
-        # Execute the step in the environment
         observation, reward, done, info = env.step(action)
         
         return {
@@ -116,9 +115,11 @@ async def step(request: ActionRequest):
 
 @app.get("/state")
 async def state():
-    """Get current environment state for debugging"""
+    """Get current environment state"""
     try:
-        return {"state": env.state(), "success": True}
+        # Check if env.state() exists, otherwise return general info
+        state_data = env.state() if hasattr(env, 'state') else {"status": "active"}
+        return {"state": state_data, "success": True}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
@@ -133,7 +134,13 @@ async def info():
         "success": True
     }
 
-if __name__ == "__main__":
-    # Standard port for Hugging Face Spaces is 7860
+# CRITICAL FIX: The grader needs a callable main() function 
+# for multi-mode deployment validation.
+def main():
+    """Callable entry point for the OpenEnv validator"""
     port = int(os.getenv("PORT", 7860))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # We use "server.app:app" because uvicorn needs the module path
+    uvicorn.run("server.app:app", host="0.0.0.0", port=port, reload=False)
+
+if __name__ == "__main__":
+    main()
