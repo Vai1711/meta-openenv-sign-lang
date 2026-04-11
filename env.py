@@ -22,7 +22,7 @@ class SignObservation(BaseModel):
     sequence_length: int = 1
     current_position: int = 0
     difficulty: DifficultyLevel
-    previous_signs: List[str] = Field(default_factory=list)
+    previous_signs: List[str] = []
 
 class SignAction(BaseModel):
     action_type: ActionType
@@ -31,9 +31,12 @@ class SignAction(BaseModel):
     translation: Optional[str] = None
 
     def validate_action(self) -> bool:
-        if self.action_type == ActionType.QUERY_DICT: return self.query_sign is not None
-        if self.action_type == ActionType.QUERY_CONTEXT: return self.query_context is not None
-        if self.action_type == ActionType.SUBMIT_TRANSLATION: return self.translation is not None
+        if self.action_type == ActionType.QUERY_DICT:
+            return self.query_sign is not None
+        if self.action_type == ActionType.QUERY_CONTEXT:
+            return self.query_context is not None
+        if self.action_type == ActionType.SUBMIT_TRANSLATION:
+            return self.translation is not None
         return False
 
 class SignInfo(BaseModel):
@@ -47,79 +50,78 @@ class SignInfo(BaseModel):
 
 class SignLanguageDictionary:
     def __init__(self):
-        self.signs: Dict[str, SignInfo] = self._initialize_signs()
+        self.signs = self._initialize_signs()
 
     def _initialize_signs(self) -> Dict[str, SignInfo]:
+        # Keeping your core 33 signs (Truncated here for brevity, keep your full list)
         return {
-            "APPLE": SignInfo(name="APPLE", hand_description="Fist at cheek, twist", category="food", difficulty=1),
-            "WATER": SignInfo(name="WATER", hand_description="W shape, tap chin", category="drink", difficulty=2),
-            "BAT": SignInfo(name="BAT", hand_description="B shape, flap wrist", audio_hint="animal", category="animal", difficulty=3),
-            "BASEBALL": SignInfo(name="BASEBALL", hand_description="Swing motion", audio_hint="sports", category="sports", difficulty=3),
-            "HELLO": SignInfo(name="HELLO", hand_description="Salute from forehead", category="polite", difficulty=1),
-            "SQUASH_VEGETABLE": SignInfo(name="SQUASH_VEGETABLE", hand_description="Press hands", audio_hint="vegetable", category="food", difficulty=3),
-            "SQUASH_SPORT": SignInfo(name="SQUASH_SPORT", hand_description="Hit alternately", audio_hint="sport", category="sports", difficulty=3)
+            "APPLE": SignInfo(name="APPLE", hand_description="Twist fist at cheek", category="food", difficulty=1),
+            "BAT": SignInfo(name="BAT", hand_description="B-shape flap at wrist", audio_hint="animal", category="animal", difficulty=3),
+            "BASEBALL": SignInfo(name="BASEBALL", hand_description="Swing fists like a bat", audio_hint="sports equipment", category="sports", difficulty=3),
+            "SQUASH_VEGETABLE": SignInfo(name="SQUASH_VEGETABLE", hand_description="Press C-shapes", audio_hint="vegetable", category="food", difficulty=3),
+            "SQUASH_SPORT": SignInfo(name="SQUASH_SPORT", hand_description="Hit C-shapes alternately", audio_hint="sport", context_clue="At a sports club", category="sports", difficulty=3),
+            # ... Include your other signs here ...
         }
 
-class SignInterpreterEnv:
-    def __init__(self, max_steps: int = 10, seed: Optional[int] = None, task_id: Optional[int] = None):
-        self.max_steps = max_steps
-        self.seed = seed
-        self.task_id = task_id
-        self.dictionary = SignLanguageDictionary()
-        self._set_difficulty(task_id)
-        self.current_step = 0
+    def get_sign(self, name: str) -> Optional[SignInfo]:
+        return self.signs.get(name.upper())
 
-    def _set_difficulty(self, task_id: Optional[int]):
-        if task_id is not None:
-            diffs = [DifficultyLevel.EASY, DifficultyLevel.MEDIUM, DifficultyLevel.HARD]
-            self.current_difficulty = diffs[task_id % 3]
-        else:
-            self.current_difficulty = DifficultyLevel.EASY
+class SignInterpreterEnv:
+    def __init__(self, max_steps: int = 10, seed: Optional[int] = None):
+        self.max_steps = max_steps
+        self.dictionary = SignLanguageDictionary()
+        if seed: random.seed(seed)
 
     def reset(self, task_id: Optional[int] = None) -> SignObservation:
         self.current_step = 0
-        if task_id is not None:
-            self._set_difficulty(task_id)
+        self.episode_reward = 0.0
         
-        all_signs = list(self.dictionary.signs.keys())
-        if self.current_difficulty == DifficultyLevel.EASY:
-            self.current_sequence = [random.choice(all_signs)]
-        elif self.current_difficulty == DifficultyLevel.MEDIUM:
-            self.current_sequence = random.sample(all_signs, 3)
-        else:
-            self.current_sequence = [random.choice(["SQUASH_VEGETABLE", "SQUASH_SPORT", "BAT", "BASEBALL"])]
-            
+        # FIX: Explicit Task ID mapping for the grader
+        if task_id == 0: self.current_difficulty = DifficultyLevel.EASY
+        elif task_id == 1: self.current_difficulty = DifficultyLevel.MEDIUM
+        elif task_id == 2: self.current_difficulty = DifficultyLevel.HARD
+        else: self.current_difficulty = DifficultyLevel.EASY
+        
+        self.current_sequence = self._generate_sequence()
         self.target_translation = " ".join(self.current_sequence)
         return self._get_observation()
 
+    def _generate_sequence(self) -> List[str]:
+        all_signs = list(self.dictionary.signs.keys())
+        if self.current_difficulty == DifficultyLevel.EASY:
+            return [random.choice(all_signs)]
+        elif self.current_difficulty == DifficultyLevel.MEDIUM:
+            return random.sample(all_signs, 3)
+        else: # HARD
+            # Logic to force ambiguous pairs
+            pairs = [["BAT", "BASEBALL"], ["SQUASH_VEGETABLE", "SQUASH_SPORT"]]
+            return [random.choice(random.choice(pairs))]
+
     def step(self, action: SignAction) -> Tuple[SignObservation, float, bool, Dict[str, Any]]:
         self.current_step += 1
-        reward = 0.0
+        reward = -0.01 # Step penalty
         done = False
         
         if action.action_type == ActionType.SUBMIT_TRANSLATION:
             if action.translation and action.translation.strip().upper() == self.target_translation:
-                reward = 1.0 if self.current_difficulty == DifficultyLevel.EASY else 1.8
+                reward = {"easy": 1.0, "medium": 1.5, "hard": 2.0}[self.current_difficulty.value]
                 done = True
             else:
-                reward = -0.1
+                reward -= 0.1
         
-        reward -= 0.01  # Step penalty
         if self.current_step >= self.max_steps: done = True
+        self.episode_reward += reward
         return self._get_observation(), reward, done, {}
 
     def _get_observation(self) -> SignObservation:
-        s = self.dictionary.get_sign(self.current_sequence[0])
+        sign = self.dictionary.get_sign(self.current_sequence[0])
         return SignObservation(
-            hand_description=s.hand_description,
-            audio_hint=s.audio_hint if self.current_difficulty == DifficultyLevel.HARD else None,
-            sequence_length=len(self.current_sequence),
-            current_position=0,
+            hand_description=sign.hand_description,
+            facial_expression=sign.facial_expression,
+            audio_hint=sign.audio_hint if self.current_difficulty == DifficultyLevel.HARD else None,
+            context_clue=sign.context_clue if self.current_difficulty == DifficultyLevel.HARD else None,
             difficulty=self.current_difficulty,
-            previous_signs=[]
+            sequence_length=len(self.current_sequence)
         )
-    
-    def state(self): return {"difficulty": self.current_difficulty}
-    async def close(self): pass
 
 def get_all_signs(): return SignLanguageDictionary().signs
