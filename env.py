@@ -53,14 +53,41 @@ class SignLanguageDictionary:
         self.signs = self._initialize_signs()
 
     def _initialize_signs(self) -> Dict[str, SignInfo]:
-        # Keeping your core 33 signs (Truncated here for brevity, keep your full list)
+        # FULL DICTIONARY (33 SIGNS)
         return {
             "APPLE": SignInfo(name="APPLE", hand_description="Twist fist at cheek", category="food", difficulty=1),
+            "BANANA": SignInfo(name="BANANA", hand_description="Trace banana shape downward", category="food", difficulty=1),
+            "WATER": SignInfo(name="WATER", hand_description="W shape tap chin", category="drink", difficulty=2),
+            "ME": SignInfo(name="ME", hand_description="Point to chest", category="pronoun", difficulty=1),
+            "WANT": SignInfo(name="WANT", hand_description="Pull hands back palms up", category="verb", difficulty=2),
             "BAT": SignInfo(name="BAT", hand_description="B-shape flap at wrist", audio_hint="animal", category="animal", difficulty=3),
             "BASEBALL": SignInfo(name="BASEBALL", hand_description="Swing fists like a bat", audio_hint="sports equipment", category="sports", difficulty=3),
+            "CAT": SignInfo(name="CAT", hand_description="Pinch cheeks pull out", category="animal", difficulty=2),
+            "DOG": SignInfo(name="DOG", hand_description="Pat leg snap fingers", category="animal", difficulty=2),
+            "BOOK": SignInfo(name="BOOK", hand_description="Open hands like a book", category="object", difficulty=1),
+            "READ": SignInfo(name="READ", hand_description="Move eyes over open hands", category="verb", difficulty=2),
+            "HELP": SignInfo(name="HELP", hand_description="Lift fist with flat hand", category="verb", difficulty=2),
+            "THANK": SignInfo(name="THANK", hand_description="Hand from chin forward", category="polite", difficulty=1),
+            "PLEASE": SignInfo(name="PLEASE", hand_description="Circle on chest", category="polite", difficulty=1),
+            "HOUSE": SignInfo(name="HOUSE", hand_description="Draw roof and walls", category="location", difficulty=2),
+            "CAR": SignInfo(name="CAR", hand_description="Steer imaginary wheel", category="transportation", difficulty=1),
+            "MILK": SignInfo(name="MILK", hand_description="Squeeze repeated motion", category="drink", difficulty=2),
+            "BREAD": SignInfo(name="BREAD", hand_description="Slice flat hand", category="food", difficulty=2),
+            "FISH": SignInfo(name="FISH", hand_description="Wiggle hand like swimming", category="animal", difficulty=2),
+            "BIRD": SignInfo(name="BIRD", hand_description="Beak shape at mouth", category="animal", difficulty=3),
+            "TREE": SignInfo(name="TREE", hand_description="Arm as trunk shake hand", category="nature", difficulty=2),
+            "FLOWER": SignInfo(name="FLOWER", hand_description="Bud to bloom fingers", category="nature", difficulty=3),
+            "COMPUTER": SignInfo(name="COMPUTER", hand_description="Type on keyboard", category="technology", difficulty=2),
+            "PHONE": SignInfo(name="PHONE", hand_description="Y shape to ear", category="technology", difficulty=1),
+            "MUSIC": SignInfo(name="MUSIC", hand_description="Wave conducting orchestra", category="art", difficulty=2),
+            "DANCE": SignInfo(name="DANCE", hand_description="Swing body rhythmically", category="art", difficulty=2),
+            "SLEEP": SignInfo(name="SLEEP", hand_description="Cheek on hands", category="action", difficulty=1),
+            "WORK": SignInfo(name="WORK", hand_description="Tap fists together", category="action", difficulty=2),
             "SQUASH_VEGETABLE": SignInfo(name="SQUASH_VEGETABLE", hand_description="Press C-shapes", audio_hint="vegetable", category="food", difficulty=3),
             "SQUASH_SPORT": SignInfo(name="SQUASH_SPORT", hand_description="Hit C-shapes alternately", audio_hint="sport", context_clue="At a sports club", category="sports", difficulty=3),
-            # ... Include your other signs here ...
+            "ORANGE_FRUIT": SignInfo(name="ORANGE_FRUIT", hand_description="Squeeze O-shape at chin", audio_hint="fruit", context_clue="In a kitchen", category="food", difficulty=3),
+            "ORANGE_COLOR": SignInfo(name="ORANGE_COLOR", hand_description="Squeeze O-shape move forward", audio_hint="color", category="color", difficulty=3),
+            "HELLO": SignInfo(name="HELLO", hand_description="Salute from forehead", category="polite", difficulty=1)
         }
 
     def get_sign(self, name: str) -> Optional[SignInfo]:
@@ -70,13 +97,16 @@ class SignInterpreterEnv:
     def __init__(self, max_steps: int = 10, seed: Optional[int] = None):
         self.max_steps = max_steps
         self.dictionary = SignLanguageDictionary()
-        if seed: random.seed(seed)
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
+        self.stats = {"total_reward": 0.0, "episodes": 0}
 
     def reset(self, task_id: Optional[int] = None) -> SignObservation:
         self.current_step = 0
         self.episode_reward = 0.0
         
-        # FIX: Explicit Task ID mapping for the grader
+        # Explicit Task ID mapping
         if task_id == 0: self.current_difficulty = DifficultyLevel.EASY
         elif task_id == 1: self.current_difficulty = DifficultyLevel.MEDIUM
         elif task_id == 2: self.current_difficulty = DifficultyLevel.HARD
@@ -92,26 +122,39 @@ class SignInterpreterEnv:
             return [random.choice(all_signs)]
         elif self.current_difficulty == DifficultyLevel.MEDIUM:
             return random.sample(all_signs, 3)
-        else: # HARD
-            # Logic to force ambiguous pairs
-            pairs = [["BAT", "BASEBALL"], ["SQUASH_VEGETABLE", "SQUASH_SPORT"]]
+        else: # HARD - Visual Twin Disambiguation
+            pairs = [["BAT", "BASEBALL"], ["SQUASH_VEGETABLE", "SQUASH_SPORT"], ["ORANGE_FRUIT", "ORANGE_COLOR"]]
             return [random.choice(random.choice(pairs))]
 
     def step(self, action: SignAction) -> Tuple[SignObservation, float, bool, Dict[str, Any]]:
         self.current_step += 1
-        reward = -0.01 # Step penalty
+        reward = -0.01 # Small step penalty
         done = False
         
         if action.action_type == ActionType.SUBMIT_TRANSLATION:
             if action.translation and action.translation.strip().upper() == self.target_translation:
+                # Rewards based on difficulty
                 reward = {"easy": 1.0, "medium": 1.5, "hard": 2.0}[self.current_difficulty.value]
                 done = True
             else:
-                reward -= 0.1
+                reward = -0.2
         
-        if self.current_step >= self.max_steps: done = True
+        if self.current_step >= self.max_steps:
+            done = True
+            
         self.episode_reward += reward
+        if done:
+            self.stats["total_reward"] += self.episode_reward
+            self.stats["episodes"] += 1
+            
         return self._get_observation(), reward, done, {}
+
+    def state(self) -> Dict[str, Any]:
+        return {
+            "difficulty": self.current_difficulty.value,
+            "step": self.current_step,
+            "target": self.target_translation
+        }
 
     def _get_observation(self) -> SignObservation:
         sign = self.dictionary.get_sign(self.current_sequence[0])
@@ -124,4 +167,5 @@ class SignInterpreterEnv:
             sequence_length=len(self.current_sequence)
         )
 
-def get_all_signs(): return SignLanguageDictionary().signs
+def get_all_signs():
+    return SignLanguageDictionary().signs
